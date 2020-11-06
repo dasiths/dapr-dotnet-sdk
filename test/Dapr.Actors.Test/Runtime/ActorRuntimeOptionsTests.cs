@@ -23,16 +23,16 @@ namespace Dapr.Actors.Test.Runtime
             var activator = Mock.Of<ActorActivator>();
 
             var actorRuntimeOptions = new ActorRuntimeOptions();
-            actorRuntimeOptions.Actors.RegisterActor<TestActor>(options =>
+            actorRuntimeOptions.Actors.RegisterActor<TestActor>(registration =>
             {
-                options.Activator = activator;
+                registration.Activator = activator;
             });
 
             Assert.Collection(
                 actorRuntimeOptions.Actors,
                 registration => 
                 {
-                    Assert.Same(actorTypeInformation, registration.Type);
+                    Assert.Same(actorTypeInformation.ImplementationType, registration.Type.ImplementationType);
                     Assert.Same(activator, registration.Activator);
                 });
         }
