@@ -15,12 +15,13 @@ namespace Dapr.Actors.Test
     using Dapr.Actors.Runtime;
     using Xunit;
     using Microsoft.Extensions.Logging;
+    using System.Linq;
 
     public sealed class ActorRuntimeTests
     {
         private const string RenamedActorTypeName = "MyRenamedActor";
-        private ActorRuntimeOptions options = new ActorRuntimeOptions();
         private ILoggerFactory loggerFactory = new LoggerFactory();
+        private ActorActivatorFactory activatorFactory = new DefaultActorActivatorFactory();
 
         private interface ITestActor : IActor
         {
@@ -31,21 +32,23 @@ namespace Dapr.Actors.Test
         {
             var actorType = typeof(TestActor);
             
-            options.RegisterActor<TestActor>();
-            var actorRuntime = new ActorRuntime(options, loggerFactory);
+            var options = new ActorRuntimeOptions();
+            options.Actors.RegisterActor<TestActor>();
+            var runtime = new ActorRuntime(options, loggerFactory, activatorFactory);
 
-            Assert.Contains(actorType.Name, actorRuntime.RegisteredActorTypes, StringComparer.InvariantCulture);
+            Assert.Contains(actorType.Name, runtime.RegisteredActors.Select(a => a.Type.ActorTypeName), StringComparer.InvariantCulture);
         }
 
         [Fact]
         public void TestExplicitActorType()
         {
             var actorType = typeof(RenamedActor);
-            options.RegisterActor<RenamedActor>();
-            var actorRuntime = new ActorRuntime(options, loggerFactory);
+            var options = new ActorRuntimeOptions();
+            options.Actors.RegisterActor<RenamedActor>();
+            var runtime = new ActorRuntime(options, loggerFactory, activatorFactory);
 
             Assert.NotEqual(RenamedActorTypeName, actorType.Name);
-            Assert.Contains(RenamedActorTypeName, actorRuntime.RegisteredActorTypes, StringComparer.InvariantCulture);
+            Assert.Contains(RenamedActorTypeName, runtime.RegisteredActors.Select(a => a.Type.ActorTypeName), StringComparer.InvariantCulture);
         }
 
         // This tests the change that removed the Activate message from Dapr runtime -> app.
@@ -54,15 +57,16 @@ namespace Dapr.Actors.Test
         {
             var actorType = typeof(MyActor);
 
-            options.RegisterActor<MyActor>();
-            var runtime = new ActorRuntime(options, loggerFactory);
+            var options = new ActorRuntimeOptions();
+            options.Actors.RegisterActor<MyActor>();
+            var runtime = new ActorRuntime(options, loggerFactory, activatorFactory);
 
             var output = new MemoryStream();
             await runtime.DispatchWithoutRemotingAsync("MyActor", "abc", "MyMethod", new MemoryStream(), output);
             string s = Encoding.UTF8.GetString(output.ToArray());
 
             Assert.Equal("\"hi\"", s);
-            Assert.Contains(actorType.Name, runtime.RegisteredActorTypes, StringComparer.InvariantCulture);
+            Assert.Contains(actorType.Name, runtime.RegisteredActors.Select(a => a.Type.ActorTypeName), StringComparer.InvariantCulture);
             Console.WriteLine("done");
         }
 
@@ -70,21 +74,20 @@ namespace Dapr.Actors.Test
         public void TestActorSettings()
         {
             var actorType = typeof(TestActor);
-            options.RegisterActor<TestActor>();
-            var actorRuntime = new ActorRuntime(options, loggerFactory);
 
-            actorRuntime.ConfigureActorSettings(a =>
-            {
-                a.ActorIdleTimeout = TimeSpan.FromSeconds(33);
-                a.ActorScanInterval = TimeSpan.FromSeconds(44);
-                a.DrainOngoingCallTimeout = TimeSpan.FromSeconds(55);
-                a.DrainRebalancedActors = true;
-            });
+            var options = new ActorRuntimeOptions();
+            options.Actors.RegisterActor<TestActor>();
+            options.ActorIdleTimeout = TimeSpan.FromSeconds(33);
+            options.ActorScanInterval = TimeSpan.FromSeconds(44);
+            options.DrainOngoingCallTimeout = TimeSpan.FromSeconds(55);
+            options.DrainRebalancedActors = true;
 
-            Assert.Contains(actorType.Name, actorRuntime.RegisteredActorTypes, StringComparer.InvariantCulture);
+            var runtime = new ActorRuntime(options, loggerFactory, activatorFactory);
+
+            Assert.Contains(actorType.Name, runtime.RegisteredActors.Select(a => a.Type.ActorTypeName), StringComparer.InvariantCulture);
 
             ArrayBufferWriter<byte> writer = new ArrayBufferWriter<byte>();
-            actorRuntime.SerializeSettingsAndRegisteredTypes(writer).GetAwaiter().GetResult();
+            runtime.SerializeSettingsAndRegisteredTypes(writer).GetAwaiter().GetResult();
 
             // read back the serialized json
             var array = writer.WrittenSpan.ToArray();
@@ -117,8 +120,8 @@ namespace Dapr.Actors.Test
 
         private sealed class TestActor : Actor, ITestActor
         {
-            public TestActor(ActorService actorService, ActorId actorId)
-                : base(actorService, actorId)
+            public TestActor(ActorService actorService)
+                : base(actorService)
             {
             }
         }
@@ -126,8 +129,8 @@ namespace Dapr.Actors.Test
         [Actor(TypeName = RenamedActorTypeName)]
         private sealed class RenamedActor : Actor, ITestActor
         {
-            public RenamedActor(ActorService actorService, ActorId actorId)
-                : base(actorService, actorId)
+            public RenamedActor(ActorService actorService)
+                : base(actorService)
             {
             }
         }
@@ -139,8 +142,8 @@ namespace Dapr.Actors.Test
 
         private sealed class MyActor : Actor, IAnotherActor
         {
-            public MyActor(ActorService actorService, ActorId actorId)
-                : base(actorService, actorId)
+            public MyActor(ActorService actorService)
+                : base(actorService)
             {
             }
 

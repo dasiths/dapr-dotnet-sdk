@@ -20,7 +20,6 @@ namespace Dapr.Actors.Runtime
     /// </remarks>
     public abstract class Actor
     {
-        private readonly string traceId;
         private readonly string actorTypeName;
 
         /// <summary>
@@ -37,15 +36,11 @@ namespace Dapr.Actors.Runtime
         /// Initializes a new instance of the <see cref="Actor"/> class.
         /// </summary>
         /// <param name="actorService">The <see cref="ActorService"/> that will host this actor instance.</param>
-        /// <param name="actorId">Id for the actor.</param>
-        /// <param name="actorStateManager">The custom implementation of the StateManager.</param>
-        protected Actor(ActorService actorService, ActorId actorId, IActorStateManager actorStateManager = default)
+        protected Actor(ActorService actorService)
         {
-            this.Id = actorId;
-            this.traceId = this.Id.ToString();
-            this.IsDirty = false;
             this.ActorService = actorService;
-            this.StateManager = actorStateManager ?? new ActorStateManager(this);
+            this.Id = this.ActorService.Id;
+            this.StateManager = new ActorStateManager(this);
             this.actorTypeName = this.ActorService.ActorTypeInfo.ActorTypeName;
             this.logger = actorService.LoggerFactory.CreateLogger(this.GetType());
         }
@@ -62,12 +57,10 @@ namespace Dapr.Actors.Runtime
         /// <value>The <see cref="ActorService"/> for the actor.</value>
         public ActorService ActorService { get; }
 
-        internal bool IsDirty { get; private set; }
-
         /// <summary>
         /// Gets the StateManager for the actor.
         /// </summary>
-        protected IActorStateManager StateManager { get; }
+        protected IActorStateManager StateManager { get; set; }
 
         internal async Task OnActivateInternalAsync()
         {
